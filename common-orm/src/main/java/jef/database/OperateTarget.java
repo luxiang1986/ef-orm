@@ -440,7 +440,7 @@ public class OperateTarget implements SqlTemplate, JDBCTarget {
 	}
 
 	public final <T> List<T> selectBySql(String sql, Transformer transformer, IntRange range, Object... params) throws SQLException {
-		BindSql bs = range == null ? new BindSql(sql) : getProfile().getLimitHandler().toPageSQL(sql, range.toStartLimitSpan());
+		BindSql bs = range == null ? new BindSql(sql,null) : getProfile().getLimitHandler().toPageSQL(new BindSql(sql,null), range.toStartLimitSpan());
 		long start = System.currentTimeMillis();
 		TransformerAdapter<T> sqlTransformer = new TransformerAdapter<T>(transformer, this);
 		List<T> list = innerSelectBySql(bs.getSql(), sqlTransformer, Arrays.asList(params), bs);

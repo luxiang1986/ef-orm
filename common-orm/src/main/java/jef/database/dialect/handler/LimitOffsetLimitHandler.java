@@ -7,27 +7,28 @@ import jef.tools.StringUtils;
 
 public class LimitOffsetLimitHandler implements LimitHandler {
 	private UnionJudgement unionJudge;
-	
-	public LimitOffsetLimitHandler(){
-		if(UnionJudgement.isDruid()){
-			unionJudge=new UnionJudgementDruidPGImpl();
-		}else{
-			unionJudge=UnionJudgement.DEFAULT;
+
+	public LimitOffsetLimitHandler() {
+		if (UnionJudgement.isDruid()) {
+			unionJudge = new UnionJudgementDruidPGImpl();
+		} else {
+			unionJudge = UnionJudgement.DEFAULT;
 		}
 	}
-	
-	public BindSql toPageSQL(String sql, int[] range) {
-		return toPageSQL(sql, range,unionJudge.isUnion(sql));
+
+	public BindSql toPageSQL(BindSql sql, int[] range) {
+		return toPageSQL(sql, range, unionJudge.isUnion(sql.getSql()));
 
 	}
 
-	public BindSql toPageSQL(String sql, int[] range, boolean isUnion) {
+	public BindSql toPageSQL(BindSql sql, int[] range, boolean isUnion) {
 		String limit;
-		if(range[0]==0){
-			limit=" limit "+range[1];
-		}else{
-			limit=" limit "+range[1]+" offset "+range[0];
+		if (range[0] == 0) {
+			limit = " limit " + range[1];
+		} else {
+			limit = " limit " + range[1] + " offset " + range[0];
 		}
-		return new BindSql(isUnion ? StringUtils.concat("select * from (", sql, ") tb__", limit) : sql.concat(limit));
+		String s = sql.getSql();
+		return new BindSql(isUnion ? StringUtils.concat("select * from (", s, ") tb__", limit) : s.concat(limit), sql.getBind());
 	}
 }

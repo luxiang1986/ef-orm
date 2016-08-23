@@ -75,8 +75,8 @@ public class SimpleExecutionPlan implements ExecuteablePlan, QueryablePlan {
 			// Scenario 2: 普通查询 (变更数据源，垂直拆分场景)
 			db = db.getTarget(changeDataSource);
 		}
-		String s = processPage(parse, sql, sql.toString());
-		return db.innerSelectBySql(s, AbstractResultSetTransformer.getRaw(fetchSize, maxRows), parse.params, parse);
+		BindSql s = processPage(parse, sql, new BindSql(sql.toString(),null));
+		return db.innerSelectBySql(s.getSql(), AbstractResultSetTransformer.getRaw(fetchSize, maxRows), parse.params, parse);
 	}
 
 	@Override
@@ -110,7 +110,7 @@ public class SimpleExecutionPlan implements ExecuteablePlan, QueryablePlan {
 	 * 
 	 * @return
 	 */
-	private String processPage(SqlAndParameter parse, Statement sql, String rawSQL) {
+	private BindSql processPage(SqlAndParameter parse, Statement sql, BindSql rawSQL) {
 		if (parse.getLimit() != null) {
 			Limit limit = parse.getLimit();
 			int offset = 0;
@@ -137,13 +137,13 @@ public class SimpleExecutionPlan implements ExecuteablePlan, QueryablePlan {
 				boolean isUnion = sql == null ? true : (((Select) sql).getSelectBody() instanceof Union);
 				BindSql bs = db.getProfile().getLimitHandler().toPageSQL(rawSQL, new int[] { offset, rowcount }, isUnion);
 				parse.setReverseResultSet(bs.getRsLaterProcessor());
-				return bs.getSql();
+				return bs;
 			}
 		}
 		return rawSQL;
 	}
 
-	private String toPageSql(SqlAndParameter context, String rawSQL, PageLimit range) {
+	private BindSql toPageSql(SqlAndParameter context, BindSql rawSQL, PageLimit range) {
 		if (range == null && context.getLimit() == null) {
 			return rawSQL;
 		}
@@ -181,7 +181,7 @@ public class SimpleExecutionPlan implements ExecuteablePlan, QueryablePlan {
 				boolean isUnion = ((Select) sql).getSelectBody() instanceof Union;
 				BindSql bs = this.db.getProfile().getLimitHandler().toPageSQL(rawSQL, range1.toStartLimitSpan(), isUnion);
 				context.setReverseResultSet(bs.getRsLaterProcessor());
-				return bs.getSql();
+				return bs;
 			}
 		}
 
@@ -193,7 +193,7 @@ public class SimpleExecutionPlan implements ExecuteablePlan, QueryablePlan {
 				boolean isUnion = sb instanceof Union;
 				BindSql bs = this.db.getProfile().getLimitHandler().toPageSQL(rawSQL, range.toArray(), isUnion);
 				context.setReverseResultSet(bs.getRsLaterProcessor());
-				return bs.getSql();
+				return bs;
 			}
 		}
 		return rawSQL;
@@ -205,9 +205,9 @@ public class SimpleExecutionPlan implements ExecuteablePlan, QueryablePlan {
 		if (changeDataSource != null) {
 			db = db.getTarget(changeDataSource);
 		}
-		String rawSQL = sqlContext.statement.toString();
+		BindSql rawSQL = new BindSql(sqlContext.statement.toString(),null);
 		rawSQL = toPageSql(sqlContext, rawSQL, range);
 
-		return db.innerSelectBySql(rawSQL, extractor, sqlContext.params, sqlContext);
+		return db.innerSelectBySql(rawSQL.getSql(), extractor, sqlContext.params, sqlContext);
 	}
 }

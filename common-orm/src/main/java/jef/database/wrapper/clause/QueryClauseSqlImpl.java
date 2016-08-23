@@ -83,10 +83,11 @@ public class QueryClauseSqlImpl implements QueryClause {
 	}
 
 	private BindSql withPage(String sql) {
+		BindSql result=new BindSql(sql, bind);
 		if (pageRange != null) {
-			return profile.getLimitHandler().toPageSQL(sql, pageRange.toArray(), isUnion);
+			return profile.getLimitHandler().toPageSQL(result, pageRange.toArray(), isUnion);
 		}
-		return new BindSql(sql);
+		return result;
 	}
 
 	public PartitionResult[] getTables() {

@@ -796,9 +796,9 @@ public abstract class AbstractDialect implements DatabaseDialect {
 	}
 
 	private static Map<String, String> initDialectMapping() {
-		URL url = AbstractDialect.class.getResource("/META-INF/dialect-mapping.properties");
+		URL url = AbstractDialect.class.getResource("/META-INF/dialect-mappings.properties");
 		if (url == null) {
-			LogUtil.fatal("Can not found Dialect Mapping File. /META-INF/dialect-mapping.properties");
+			LogUtil.fatal("Can not found Dialect Mapping File. /META-INF/dialect-mappings.properties");
 		}
 		Map<String, String> config = IOUtils.loadProperties(url);
 		String file = JefConfiguration.get(DbCfg.DB_DIALECT_CONFIG);

@@ -348,7 +348,7 @@ public class SelectExecutionPlan extends AbstractExecutionPlan implements Querya
 
 				IntRange range1 = new IntRange(offset + 1, offset + rowcount);
 				boolean isUnion = ((Select) sql).getSelectBody() instanceof Union;
-				BindSql bs = this.context.db.getProfile().getLimitHandler().toPageSQL(rawSQL, range1.toStartLimitSpan(), isUnion);
+				BindSql bs = this.context.db.getProfile().getLimitHandler().toPageSQL(new BindSql(rawSQL,null), range1.toStartLimitSpan(), isUnion);
 				context.setReverseResultSet(bs.getRsLaterProcessor());
 				return bs.getSql();
 			}
@@ -360,7 +360,7 @@ public class SelectExecutionPlan extends AbstractExecutionPlan implements Querya
 				context.setNewLimit(range);
 			} else {
 				boolean isUnion = sb instanceof Union;
-				BindSql bs = this.context.db.getProfile().getLimitHandler().toPageSQL(rawSQL, range.toArray(), isUnion);
+				BindSql bs = this.context.db.getProfile().getLimitHandler().toPageSQL(new BindSql(rawSQL,null), range.toArray(), isUnion);
 				context.setReverseResultSet(bs.getRsLaterProcessor());
 				return bs.getSql();
 			}
@@ -594,7 +594,7 @@ public class SelectExecutionPlan extends AbstractExecutionPlan implements Querya
 			if (offset > 0 || rowcount > 0) {
 				parse.setNewLimit(null);
 				boolean isUnion = sql == null ? true : (((Select) sql).getSelectBody() instanceof Union);
-				BindSql bs = context.db.getProfile().getLimitHandler().toPageSQL(rawSQL, new int[] { offset, rowcount }, isUnion);
+				BindSql bs = context.db.getProfile().getLimitHandler().toPageSQL(new BindSql(rawSQL,null), new int[] { offset, rowcount }, isUnion);
 				parse.setReverseResultSet(bs.getRsLaterProcessor());
 				return bs.getSql();
 			}

@@ -15,6 +15,7 @@
  */
 package jef.database.wrapper.clause;
 
+import java.util.Collections;
 import java.util.List;
 
 import jef.database.jdbc.result.ResultSetContainer;
@@ -25,47 +26,52 @@ import jef.tools.PageLimit;
 
 /**
  * 描述一个绑定变量的SQL语句
+ * 
  * @author jiyi
- *
+ * 
  */
-public final class BindSql implements InMemoryOperateProvider{
+public final class BindSql implements InMemoryOperateProvider {
 	private String sql;
 	private List<Variable> bind;
 	private ResultSetLaterProcess isReverseResultSet;
-	
-	public BindSql(String sql){
-		this.sql=sql;
+
+	public BindSql(String sql, List<Variable> bind) {
+		this.sql = sql;
+		this.bind = bind;
 	}
-	
-	public BindSql(String sql,List<Variable> bind){
-		this.sql=sql;
-		this.bind=bind;
-	}
+
 	/**
 	 * 得到SQL语句
+	 * 
 	 * @return SQL语句
 	 */
 	public String getSql() {
 		return sql;
 	}
+
 	public BindSql setSql(String sql) {
 		this.sql = sql;
 		return this;
 	}
+
 	/**
 	 * 得到绑定变量描述
+	 * 
 	 * @return 绑定变量描述
 	 */
 	public List<Variable> getBind() {
-		return bind;
+		return bind==null?Collections.<Variable>emptyList():bind;
 	}
+
 	public BindSql setBind(List<Variable> bind) {
 		this.bind = bind;
 		return this;
 	}
-	public boolean isBind(){
-		return bind!=null && bind.size()>0;
+
+	public boolean isBind() {
+		return bind != null && bind.size() > 0;
 	}
+
 	@Override
 	public String toString() {
 		return sql;
@@ -88,5 +94,14 @@ public final class BindSql implements InMemoryOperateProvider{
 	@Override
 	public void parepareInMemoryProcess(PageLimit range, ResultSetContainer rs) {
 		throw new UnsupportedOperationException();
+	}
+
+	public int length() {
+		return sql.length();
+	}
+
+	public BindSql concat(String sql2) {
+		this.sql = sql + sql2;
+		return this;
 	}
 }

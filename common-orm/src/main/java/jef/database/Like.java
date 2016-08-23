@@ -1,11 +1,10 @@
 package jef.database;
 
 import jef.database.Condition.Operator;
-import jef.database.dialect.DatabaseDialect;
 import jef.database.jsqlparser.visitor.Expression;
 import jef.database.meta.Feature;
-import jef.database.meta.ITableMetadata;
 import jef.database.query.SqlContext;
+import jef.database.query.condition.CondParams;
 import jef.database.wrapper.clause.SqlBuilder;
 import jef.database.wrapper.variable.ConstantVariable;
 import jef.database.wrapper.variable.QueryLookupVariable;
@@ -64,32 +63,29 @@ public class Like implements VariableConverter {
 		}
 	}
 
-	public String toPrepareSql(SqlBuilder builder,
-			ITableMetadata meta, DatabaseDialect dialect, SqlContext context,
-			IQueryableEntity instance,boolean batch) {
+	public void toPrepareSql(SqlBuilder builder,
+			SqlContext context,
+			IQueryableEntity instance,CondParams params) {
 		// 只要使用了绑定变量方式获取，那么一定要做转义
-		escape = !dialect.has(
+		escape = !params.getDialect().has(
 				Feature.NOT_SUPPORT_LIKE_ESCAPE);
 
-		StringBuilder sb = new StringBuilder();
 		String alias = context == null ? null : context.getCurrentAliasAndCheck(field);
-		String columnName = DbUtils.toColumnName(field, dialect, alias);
-		sb.append(columnName).append(name()).append("?");
+		String columnName = DbUtils.toColumnName(field, params.getDialect(), alias);
+		builder.append(columnName,name(),"?");
 		if (escape) {
-			sb.append(ESCAPE_CLAUSE);
+			builder.append(ESCAPE_CLAUSE);
 		}
 		Variable bind;
-		if(batch){
+		if(params.isBatch()){
 			bind = new QueryLookupVariable(field,operator, this);
 		}else{
 			bind = new ConstantVariable(field.name()+operator, this.process(value));
 		}
 		builder.addBind(bind);
-		return sb.toString();
 	}
 
-	public String toSql(ITableMetadata meta, DatabaseDialect dialect,
-			SqlContext context, IQueryableEntity instance) {
+	public String toSql(SqlContext context, IQueryableEntity instance,CondParams params) {
 		String valueStr = StringUtils.toString(value);
 		if(!(value instanceof Expression)){
 			if (valueStr.indexOf('%') > -1 || valueStr.indexOf('_') > -1) {
@@ -100,7 +96,7 @@ public class Like implements VariableConverter {
 		
 		StringBuilder sb = new StringBuilder();
 		String alias = context == null ? null : context.getCurrentAliasAndCheck(field);
-		String columnName = DbUtils.toColumnName(field,dialect,alias);
+		String columnName = DbUtils.toColumnName(field,params.getDialect(),alias);
 		sb.append(columnName).append(name());
 		sb.append('\'');
 		sb.append(valueStr);

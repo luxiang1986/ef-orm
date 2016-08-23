@@ -11,7 +11,9 @@ import jef.database.Field;
 import jef.database.dialect.DatabaseDialect;
 import jef.database.dialect.type.ColumnMapping;
 import jef.database.meta.ITableMetadata;
+import jef.database.query.condition.CondParams;
 import jef.database.wrapper.clause.HavingEle;
+import jef.database.wrapper.clause.SqlBuilder;
 
 public final class SelectColumn extends SingleColumnSelect{
 	private String populateTo;//拼装路径，默认应该和alias一致
@@ -28,11 +30,13 @@ public final class SelectColumn extends SingleColumnSelect{
 	/**
 	 * 转换为Having子句
 	 */
-	public HavingEle toHavingClause(DatabaseDialect profile,String tableAlias,SqlContext context){
+	public HavingEle toHavingClause(String tableAlias,SqlContext context,CondParams params){
 		HavingEle h=new HavingEle();
-		String column=innerGetColumn(profile, tableAlias);
+		String column=innerGetColumn(params.getDialect(), tableAlias);
 		h.column=column;
-		h.sql=Condition.toSql(column, havingCondOperator, havingCondValue, profile, null, null);
+		SqlBuilder builder=new SqlBuilder();
+		Condition.toSql(builder, column, havingCondOperator, havingCondValue, null, null,params);
+		h.sql=builder.build().getSql();
 		h.havingCondOperator=this.havingCondOperator;
 		h.havingCondValue=this.havingCondValue;
 		return h;

@@ -28,7 +28,7 @@ public class SQL2005LimitHandler extends SQL2000LimitHandler {
 
 
 	@Override
-	protected BindSql toPage(int[] offsetLimit, SQLServerSelectQueryBlock selectBody, SQLSelect select, String raw) {
+	protected BindSql toPage(int[] offsetLimit, SQLServerSelectQueryBlock selectBody, SQLSelect select, BindSql raw) {
 		SQLOrderBy order = select.getOrderBy();
 		if (order == null) {
 			order = defaultOrder;
@@ -48,13 +48,13 @@ public class SQL2005LimitHandler extends SQL2000LimitHandler {
 		select.accept(visitor);
 		sb.append(") _tmp1 WHERE __rn between ");
 		sb.append(offsetLimit[0] + 1).append(" and ").append(offsetLimit[0] + offsetLimit[1]);
-		return new BindSql(sb.toString());
+		return raw.setSql(sb.toString());
 	}
 
 
 
 	@Override
-	protected BindSql toPage(int[] offsetLimit, SQLUnionQuery union, SQLSelect select, String raw) {
+	protected BindSql toPage(int[] offsetLimit, SQLUnionQuery union, SQLSelect select, BindSql raw) {
 		SQLOrderBy order = super.removeOrder(union);
 		if(order==null){
 			order = defaultOrder;
@@ -69,7 +69,7 @@ public class SQL2005LimitHandler extends SQL2000LimitHandler {
 		union.accept(visitor);
 		sb.append(") _tmp1) _tmp2 WHERE __rn BETWEEN ");
 		sb.append(offsetLimit[0] + 1).append(" and ").append(offsetLimit[0] + offsetLimit[1]);
-		return new BindSql(sb.toString());
+		return raw.setSql(sb.toString());
 	}
 
 }

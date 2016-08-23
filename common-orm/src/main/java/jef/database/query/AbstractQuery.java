@@ -11,6 +11,7 @@ import jef.database.SelectProcessor;
 import jef.database.dialect.DatabaseDialect;
 import jef.database.meta.ITableMetadata;
 import jef.database.meta.MetaHolder;
+import jef.database.query.condition.CondParams;
 import jef.database.routing.PartitionResult;
 import jef.database.wrapper.clause.BindSql;
 import jef.database.wrapper.clause.GroupClause;
@@ -92,8 +93,8 @@ public abstract class AbstractQuery<T extends IQueryableEntity> implements Query
 			tableName = MetaHolder.toSchemaAdjustedName(tableName);
 		PartitionResult[] prs = DbUtils.toTableNames(getInstance(), tableName, this, processor.getPartitionSupport());
 		DatabaseDialect profile = processor.getProfile(prs);
-
-		GroupClause groupClause = SelectProcessor.toGroupAndHavingClause(this, context, profile);
+		CondParams params=new CondParams(processor.parent, profile, false);
+		GroupClause groupClause = SelectProcessor.toGroupAndHavingClause(this, context, params);
 		BindSql whereResult = processor.parent.toWhereClause(this, context, null, profile, false);
 
 		QueryClauseImpl result = new QueryClauseImpl(profile);

@@ -93,6 +93,7 @@ public class SqlContext extends AbstractEntityMappingProvider  implements Entity
 	 * @return
 	 */
 	public SqlContext getContextOf(JoinElement q){ //此处要收敛为Query
+		if(q==getCurrent().table)return this;
 		if(q instanceof Join)return new SqlContext(-1,this);
 		for(int i=0;i<queries.size();i++){
 			QueryAlias qa=queries.get(i);	
@@ -117,6 +118,14 @@ public class SqlContext extends AbstractEntityMappingProvider  implements Entity
 		}
 		return null;
 	}
+	
+	public QueryAlias getCurrent(){
+		if(currentIndex>-1){
+			return queries.get(currentIndex);
+		}
+		return null;
+	}
+	
 	
 	public String getCurrentAliasAndCheck(Field field) {
 		if(currentIndex>-1){

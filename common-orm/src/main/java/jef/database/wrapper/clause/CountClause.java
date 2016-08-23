@@ -32,7 +32,7 @@ public class CountClause implements SqlClause{
 			sqls.put(dbName, list);
 		}
 		for(String s:sql){
-			list.add(new BindSql(s));
+			list.add(new BindSql(s, null));
 		}
 	}
 	

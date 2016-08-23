@@ -394,7 +394,7 @@ public enum DbCfg implements ConfigItem {
 	DB_LOB_LAZY_LOAD,
 	/**
 	 * 用来定义数据库和方言类的映射关系的配置文件。
-	 * 默认使用 META-INF/dialect-mapping.properties
+	 * 默认使用 META-INF/dialect-mappings.properties
 	 */
 	DB_DIALECT_CONFIG,
 	/**

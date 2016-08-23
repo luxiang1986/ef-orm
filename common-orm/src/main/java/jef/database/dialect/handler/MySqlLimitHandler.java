@@ -17,14 +17,15 @@ public class MySqlLimitHandler implements LimitHandler {
 		}
 	}
 
-	public BindSql toPageSQL(String sql, int[] range) {
-		return toPageSQL(sql, range,unionJudge.isUnion(sql));
+	public BindSql toPageSQL(BindSql sql, int[] range) {
+		return toPageSQL(sql, range,unionJudge.isUnion(sql.getSql()));
 	}
 
 	@Override
-	public BindSql toPageSQL(String sql, int[] range, boolean isUnion) {
+	public BindSql toPageSQL(BindSql sql, int[] range, boolean isUnion) {
 		String[] s = new String[] { Integer.toString(range[0]), Integer.toString(range[1]) };
 		String limit = StringUtils.replaceEach(MYSQL_PAGE, new String[] { "%start%", "%next%" }, s);
-		return new BindSql(isUnion ? StringUtils.concat("select * from (", sql, ") tb__", limit) : sql.concat(limit));
+		String oldSql=sql.getSql();
+		return new BindSql(isUnion ? StringUtils.concat("select * from (", oldSql, ") tb__", limit) : oldSql.concat(limit), sql.getBind());
 	}
 }

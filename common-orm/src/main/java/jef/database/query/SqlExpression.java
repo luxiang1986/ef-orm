@@ -27,6 +27,7 @@ import jef.database.jsqlparser.visitor.Expression;
 import jef.database.jsqlparser.visitor.ExpressionType;
 import jef.database.jsqlparser.visitor.ExpressionVisitor;
 import jef.database.meta.ITableMetadata;
+import jef.database.query.condition.CondParams;
 import jef.database.wrapper.clause.SqlBuilder;
 
 /**
@@ -61,7 +62,7 @@ public final class SqlExpression implements Expression,IConditionField{
 	public String toSql(ITableMetadata meta, SqlProcessor processor, SqlContext context, IQueryableEntity instance,DatabaseDialect profile, boolean batch) {
 		return sql;
 	}
-	public void toPrepareSql(SqlBuilder fields, ITableMetadata meta, SqlProcessor processor, SqlContext context, IQueryableEntity instance,DatabaseDialect profile,boolean batch) {
+	public void toPrepareSql(SqlBuilder fields, SqlContext context, IQueryableEntity instance,CondParams params) {
 		fields.append(sql);
 	}
 	public void appendTo(StringBuilder sb) {

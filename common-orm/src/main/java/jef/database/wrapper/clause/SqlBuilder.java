@@ -7,7 +7,7 @@ import java.util.List;
 import jef.database.jdbc.statement.ResultSetLaterProcess;
 import jef.database.wrapper.variable.Variable;
 
-public class SqlBuilder {
+public class SqlBuilder implements SqlClauseBuilder{
 	private ResultSetLaterProcess afterProcessor;
 	protected final LinkedList<Section> section = new LinkedList<Section>();
 	private Section root;
@@ -44,9 +44,17 @@ public class SqlBuilder {
 		sec.sb.append(add).append(old);
 	}
 
-	public void append(String append) {
+
+	public SqlBuilder append(char c) {
+		Section sec = section.peek();
+		sec.sb.append(c);
+		return this;
+	}
+	
+	public SqlBuilder append(String append) {
 		Section sec = section.peek();
 		sec.sb.append(append);
+		return this;
 	}
 
 	public void append(String... append) {
@@ -98,5 +106,14 @@ public class SqlBuilder {
 		}
 		return root.sb.length()>0;
 		
+	}
+
+	public SqlBuilder append(BindSql bind) {
+		startSection("");
+		Section sec = section.peek();
+		sec.sb.append(bind.getSql());
+		sec.bind.addAll(bind.getBind());
+		endSection();
+		return this;
 	}
 }

@@ -14,7 +14,7 @@ public interface LimitHandler {
 	 * @param offsetLimit
 	 * @return
 	 */
-	BindSql toPageSQL(String sql,int[] offsetLimit);
+	BindSql toPageSQL(BindSql sql,int[] offsetLimit);
 	
 	/**
 	 * 对于SQL语句进行结果集限制
@@ -23,5 +23,5 @@ public interface LimitHandler {
 	 * @param isUnion
 	 * @return
 	 */
-	BindSql toPageSQL(String sql,int[] offsetLimit,boolean isUnion);
+	BindSql toPageSQL(BindSql sql,int[] offsetLimit,boolean isUnion);
 }

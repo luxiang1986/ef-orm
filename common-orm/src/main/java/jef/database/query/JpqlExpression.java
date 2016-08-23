@@ -15,12 +15,9 @@
  */
 package jef.database.query;
 
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 
-import jef.common.PairSO;
 import jef.common.log.LogUtil;
 import jef.database.DbUtils;
 import jef.database.Field;
@@ -38,8 +35,8 @@ import jef.database.jsqlparser.visitor.ExpressionVisitor;
 import jef.database.jsqlparser.visitor.VisitorAdapter;
 import jef.database.meta.ITableMetadata;
 import jef.database.meta.MetaHolder;
+import jef.database.wrapper.clause.SqlClauseBuilder;
 import jef.database.wrapper.variable.ConstantVariable;
-import jef.database.wrapper.variable.Variable;
 
 import com.google.common.base.Objects;
 
@@ -75,16 +72,14 @@ public class JpqlExpression implements Expression, LazyQueryBindField {
 	 * 1 #toSqlAndBindAttribs 不支持使用绑定变量，采用新的函数，逐渐代替旧的函数 2
 	 * 最终替代旧的#toSqlAndBindAttrib方法
 	 */
-	public PairSO<List<Variable>> toSqlAndBindAttribs2(final SqlContext context, final DatabaseDialect profile) {
+	public void toSqlAndBindAttribs2(final SqlClauseBuilder builder,final SqlContext context, final DatabaseDialect profile) {
 		// 本地化
 		st.accept(new SqlFunctionlocalization(profile, null));
 		// 属性提供
-		final List<Variable> binder =new ArrayList<Variable>();
 		if (context != null) {
 			@SuppressWarnings("unchecked")
 			final Map<String, Object> attribs = context.attribute == null ? Collections.EMPTY_MAP : context.attribute;
 			st.accept(new VisitorAdapter() {
-				@Override
 				public void visit(JpqlParameter parameter) {
 					if (parameter.getName() == null)
 						return;
@@ -97,22 +92,15 @@ public class JpqlExpression implements Expression, LazyQueryBindField {
 						}
 					} else {
 						parameter.setResolved(1);
-						binder.add(new ConstantVariable(obj));
-						//原地解析(没有使用绑定变量)
-//						if (obj instanceof Number) {
-//							parameter.setResolved(String.valueOf(obj));
-//						} else {
-//							parameter.setResolved("'" + String.valueOf(obj) + "'");
-//						}
+						builder.addBind(new ConstantVariable(obj));
 					}
 				}
 			});
 		}
 		// 字段转换
-		String result;
 		if (instance == null) {
 			st.accept(new JPQLSelectConvert(profile));
-			result = st.toString();
+			builder.append(st.toString());
 		} else {
 			String alias;
 			if (context == null) {
@@ -125,10 +113,9 @@ public class JpqlExpression implements Expression, LazyQueryBindField {
 			}
 			ColumnAliasApplier convert = new ColumnAliasApplier(alias, profile);
 			st.accept(convert);
-			result = st.toString();
+			builder.append(st.toString());
 			convert.undo();
 		}
-		return new PairSO<List<Variable>>(result, binder);
 	}
 
 	/**

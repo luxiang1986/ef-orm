@@ -1,13 +1,16 @@
 package jef.database.query.condition;
 
 import jef.database.IQueryableEntity;
-import jef.database.SqlProcessor;
-import jef.database.dialect.DatabaseDialect;
 import jef.database.query.SqlContext;
+import jef.database.wrapper.clause.SqlBuilder;
 
+/**
+ * 重构后，所有Condition对象接口
+ * 
+ * @author publicxtgxrj10
+ * 
+ */
 public interface ICondition {
-
-	String toSqlClause
-	(SqlContext context, SqlProcessor processor, IQueryableEntity instance, DatabaseDialect profile, boolean batch);
+	void toSqlClause(SqlBuilder builder, SqlContext context, IQueryableEntity instance, CondParams params);
 
 }

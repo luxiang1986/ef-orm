@@ -3,99 +3,131 @@ package jef.database.query;
 import java.util.List;
 
 import jef.database.QueryAlias;
-import jef.database.SqlProcessor;
-import jef.database.dialect.DatabaseDialect;
 import jef.database.meta.JoinKey;
 import jef.database.meta.Reference;
+import jef.database.query.condition.CondParams;
+import jef.database.wrapper.clause.SqlBuilder;
 
 /**
- * JoinQuery.
- * 由多个表Join后的查询
+ * JoinQuery. 由多个表Join后的查询
+ * 
  * @author jiyi
- *
+ * 
  */
-public interface Join extends JoinElement{
+public interface Join extends JoinElement {
 
 	/**
 	 * 将当前Join对象和一个新的查询进行左外连接。
-	 * @param right join右侧的查询对象
-	 * @param keys　　join的on条件。可以通过 {@link QueryBuilder#on(jef.database.Field, jef.database.Field)}等方法生成
+	 * 
+	 * @param right
+	 *            join右侧的查询对象
+	 * @param keys
+	 *            　　join的on条件。可以通过
+	 *            {@link QueryBuilder#on(jef.database.Field, jef.database.Field)}
+	 *            等方法生成
 	 * @return Join的查询对象
 	 * @see QueryBuilder#on(jef.database.Field, jef.database.Field)
 	 * @see QueryBuilder#on(jef.database.Field, Number)
 	 * @see QueryBuilder#on(jef.database.Field, String)
-	 * @see QueryBuilder#on(Query, jef.database.Field, Query, jef.database.Field)
-	 * @see QueryBuilder#on(jef.database.Field, jef.database.Condition.Operator, Object)
+	 * @see QueryBuilder#on(Query, jef.database.Field, Query,
+	 *      jef.database.Field)
+	 * @see QueryBuilder#on(jef.database.Field, jef.database.Condition.Operator,
+	 *      Object)
 	 */
-	public Join leftJoin(Query<?> right,JoinKey... keys);
-	
+	public Join leftJoin(Query<?> right, JoinKey... keys);
+
 	/**
 	 * 将当前Join对象和一个新的查询进行右外连接。
-	 * @param right join右侧的查询对象
-	 * @param keys　　join的on条件。可以通过 {@link QueryBuilder#on(jef.database.Field, jef.database.Field)}等方法生成
+	 * 
+	 * @param right
+	 *            join右侧的查询对象
+	 * @param keys
+	 *            　　join的on条件。可以通过
+	 *            {@link QueryBuilder#on(jef.database.Field, jef.database.Field)}
+	 *            等方法生成
 	 * @return Join的查询对象
 	 * @see QueryBuilder#on(jef.database.Field, jef.database.Field)
 	 * @see QueryBuilder#on(jef.database.Field, Number)
 	 * @see QueryBuilder#on(jef.database.Field, String)
-	 * @see QueryBuilder#on(Query, jef.database.Field, Query, jef.database.Field)
-	 * @see QueryBuilder#on(jef.database.Field, jef.database.Condition.Operator, Object)
+	 * @see QueryBuilder#on(Query, jef.database.Field, Query,
+	 *      jef.database.Field)
+	 * @see QueryBuilder#on(jef.database.Field, jef.database.Condition.Operator,
+	 *      Object)
 	 */
-	public Join rightJoin(Query<?> right,JoinKey... keys);
-	
+	public Join rightJoin(Query<?> right, JoinKey... keys);
+
 	/**
 	 * 将当前Join对象和一个新的查询进行内连接。
-	 * @param right join右侧的查询对象
-	 * @param keys　　join的on条件。可以通过 {@link QueryBuilder#on(jef.database.Field, jef.database.Field)}等方法生成
+	 * 
+	 * @param right
+	 *            join右侧的查询对象
+	 * @param keys
+	 *            　　join的on条件。可以通过
+	 *            {@link QueryBuilder#on(jef.database.Field, jef.database.Field)}
+	 *            等方法生成
 	 * @return Join的查询对象
 	 * @see QueryBuilder#on(jef.database.Field, jef.database.Field)
 	 * @see QueryBuilder#on(jef.database.Field, Number)
 	 * @see QueryBuilder#on(jef.database.Field, String)
-	 * @see QueryBuilder#on(Query, jef.database.Field, Query, jef.database.Field)
-	 * @see QueryBuilder#on(jef.database.Field, jef.database.Condition.Operator, Object)
+	 * @see QueryBuilder#on(Query, jef.database.Field, Query,
+	 *      jef.database.Field)
+	 * @see QueryBuilder#on(jef.database.Field, jef.database.Condition.Operator,
+	 *      Object)
 	 */
-	public Join innerJoin(Query<?> right,JoinKey... keys);
-	
-	
+	public Join innerJoin(Query<?> right, JoinKey... keys);
+
 	/**
 	 * 将当前Join对象和一个新的查询进行全外连接。
-	 * @param right join右侧的查询对象
-	 * @param keys　　join的on条件。可以通过 {@link QueryBuilder#on(jef.database.Field, jef.database.Field)}等方法生成
+	 * 
+	 * @param right
+	 *            join右侧的查询对象
+	 * @param keys
+	 *            　　join的on条件。可以通过
+	 *            {@link QueryBuilder#on(jef.database.Field, jef.database.Field)}
+	 *            等方法生成
 	 * @return Join的查询对象
 	 * @see QueryBuilder#on(jef.database.Field, jef.database.Field)
 	 * @see QueryBuilder#on(jef.database.Field, Number)
 	 * @see QueryBuilder#on(jef.database.Field, String)
-	 * @see QueryBuilder#on(Query, jef.database.Field, Query, jef.database.Field)
-	 * @see QueryBuilder#on(jef.database.Field, jef.database.Condition.Operator, Object)
+	 * @see QueryBuilder#on(Query, jef.database.Field, Query,
+	 *      jef.database.Field)
+	 * @see QueryBuilder#on(jef.database.Field, jef.database.Condition.Operator,
+	 *      Object)
 	 */
-	public Join fullJoin(Query<?> right,JoinKey... keys);
-	
-	
+	public Join fullJoin(Query<?> right, JoinKey... keys);
+
 	/**
-	 * 框架内部使用<p>
+	 * 框架内部使用
+	 * <p>
 	 * 将当前的Join转化为SQL语句中的表定义部分
+	 * 
 	 * @param processor
 	 * @param context
 	 * @return
 	 */
-	String toTableDefinitionSql(SqlProcessor processor, SqlContext context,DatabaseDialect profile, boolean batch);
+	void toTableDefinitionSql(SqlBuilder probuilder, SqlContext context, CondParams params);
 
-	
 	/**
-	 * 框架内部使用<p>
+	 * 框架内部使用
+	 * <p>
 	 * 获得当前Join对象当中所有参与的表查询
+	 * 
 	 * @return
 	 */
 	List<Query<?>> elements();
-	
+
 	/**
-	 * 框架内部使用<p>
+	 * 框架内部使用
+	 * <p>
 	 * 获得当前Join对象当中所有参与的表查询（含每个查询的别名）
+	 * 
 	 * @return
 	 */
 	List<QueryAlias> allElements();
-	
+
 	/**
-	 * 框架内部使用<p>
+	 * 框架内部使用
+	 * <p>
 	 * 
 	 * 如果该连接对象是由一个级联的单表操作形成，那么返回以下值
 	 * 

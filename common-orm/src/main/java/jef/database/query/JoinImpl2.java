@@ -8,7 +8,6 @@ import jef.database.DbUtils;
 import jef.database.ORMConfig;
 import jef.database.QueryAlias;
 import jef.database.SelectProcessor;
-import jef.database.SqlProcessor;
 import jef.database.annotation.JoinType;
 import jef.database.dialect.DatabaseDialect;
 import jef.database.meta.AbstractRefField;
@@ -19,10 +18,12 @@ import jef.database.meta.ITableMetadata;
 import jef.database.meta.JoinKey;
 import jef.database.meta.JoinPath;
 import jef.database.meta.Reference;
+import jef.database.query.condition.CondParams;
 import jef.database.wrapper.clause.BindSql;
 import jef.database.wrapper.clause.GroupClause;
 import jef.database.wrapper.clause.QueryClause;
 import jef.database.wrapper.clause.QueryClauseImpl;
+import jef.database.wrapper.clause.SqlBuilder;
 import jef.tools.Assert;
 import jef.tools.StringUtils;
 
@@ -236,25 +237,24 @@ final class JoinImpl2 extends AbstractJoinImpl {
 	 * 
 	 * @return
 	 */
-	public String toTableDefinitionSql(SqlProcessor processor, SqlContext context, DatabaseDialect profile, boolean batch) {
-		StringBuilder sb = new StringBuilder(64);
-		toTableDefSql(sb, context.queries.get(0), processor, context);
+	public void toTableDefinitionSql(SqlBuilder builder, SqlContext context, CondParams params) {
+		toTableDefSql(builder, context.queries.get(0), context,params);
 		// sb.append(' ');
 		String wrap = ORMConfig.getInstance().wrap;
 
 		for (int i = 0; i < conditions.size(); i++) {
 			JoinCondition relations = conditions.get(i);
-			sb.append(wrap);
-			sb.append(' ').append(relations.getType().nameLower()).append(" join ");
+			builder.append(wrap);
+			builder.append(' ');
+			builder.append(relations.getType().nameLower()," join ");
 			QueryAlias right = context.queries.get(i + 1);
-			toTableDefSql(sb, right, processor, context);
-			sb.append(" ON ");
-			relations.toOnExpression(sb, context, right, processor, profile, batch);
+			toTableDefSql(builder, right, context,params);
+			builder.append(" ON ");
+			relations.toOnExpression(builder, context, right, params);
 		}
-		return sb.toString();
 	}
 
-	private void toTableDefSql(StringBuilder sb, QueryAlias obj, SqlProcessor processor, SqlContext context) {
+	private void toTableDefSql(SqlBuilder sb, QueryAlias obj, SqlContext context, CondParams params) {
 		String alias = obj.getAlias();
 		Assert.notNull(alias);
 		Query<?> q = obj.getQuery();
@@ -262,9 +262,11 @@ final class JoinImpl2 extends AbstractJoinImpl {
 		if (q.getAttribute(ConditionQuery.CUSTOM_TABLE_NAME) != null) {
 			table = String.valueOf(q.getAttribute(ConditionQuery.CUSTOM_TABLE_NAME));
 		} else {
-			table = DbUtils.toTableName(q.getInstance(), null, q, processor.getPartitionSupport()).getAsOneTable();
+			table = DbUtils.toTableName(q.getInstance(), null, q, params.getProcessor().getPartitionSupport()).getAsOneTable();
 		}
-		sb.append(DbUtils.escapeColumn(processor.getProfile(), table)).append(' ').append(alias);
+		sb.append(DbUtils.escapeColumn(params.getDialect(), table));
+		sb.append(' ');
+		sb.append(alias);
 	}
 
 	private void checkInstance(Query<?> right2) {
@@ -343,21 +345,23 @@ final class JoinImpl2 extends AbstractJoinImpl {
 
 	@Override
 	public QueryClause toQuerySql(SelectProcessor processor, SqlContext context, boolean order) {
-		@SuppressWarnings("deprecation")
-		DatabaseDialect profile = processor.getProfile();
-		GroupClause groupClause = SelectProcessor.toGroupAndHavingClause(this, context, profile);
-		QueryClauseImpl result = new QueryClauseImpl(profile);
+		CondParams params=new CondParams(processor.parent,processor.getProfile(),false);
+		GroupClause groupClause = SelectProcessor.toGroupAndHavingClause(this, context, params);
+		QueryClauseImpl result = new QueryClauseImpl(params.getDialect());
 
-		result.setSelectPart(SelectProcessor.toSelectSql(context, groupClause, profile));
-		result.setTableDefinition(toTableDefinitionSql(processor.parent, context, profile,false));
-		BindSql whereResult = processor.parent.toWhereClause(this, context, null, profile, false);
+		result.setSelectPart(SelectProcessor.toSelectSql(context, groupClause, params.getDialect()));
+		
+		SqlBuilder builder=new SqlBuilder();
+		toTableDefinitionSql(builder,context, params);
+		result.setTableDefinition(builder.build());
+		BindSql whereResult = processor.parent.toWhereClause(this, context, null, params.getDialect(), false);
 
 		result.setWherePart(whereResult.getSql());
 		result.setBind(whereResult.getBind());
 
 		result.setGrouphavingPart(groupClause);
 		if (order)
-			result.setOrderbyPart(SelectProcessor.toOrderClause(this, context, profile));
+			result.setOrderbyPart(SelectProcessor.toOrderClause(this, context, params.getDialect()));
 		return result;
 	}
 }

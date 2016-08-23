@@ -26,7 +26,6 @@ import jef.database.dialect.DatabaseDialect;
 import jef.database.jdbc.result.ResultSetContainer;
 import jef.database.jdbc.statement.ResultSetLaterProcess;
 import jef.database.routing.PartitionResult;
-import jef.database.routing.sql.SqlAnalyzer;
 import jef.database.wrapper.variable.Variable;
 import jef.tools.Assert;
 import jef.tools.PageLimit;
@@ -38,16 +37,10 @@ import jef.tools.PageLimit;
  * 
  */
 public class QueryClauseImpl implements QueryClause {
-	/*
-	 * 这两部分总是只有一个有值 当单表查询时支持分表，所以是PartitionResult 当多表关联时，目前不支持分表，所以是string
-	 */
-	private String tableDefinition;
+
 	private PartitionResult[] tables = P;
 
 	public static final QueryClauseImpl EMPTY = new QueryClauseImpl(new PartitionResult[0]);
-
-	// //是否为union
-	// private boolean isUnion = false;
 	// Select部分
 	private SelectPart selectPart;
 	// Where
@@ -56,6 +49,12 @@ public class QueryClauseImpl implements QueryClause {
 	private GroupClause grouphavingPart;// =GroupClause.DEFAULT
 	// 排序
 	private OrderClause orderbyPart = OrderClause.DEFAULT;
+
+	/*
+	 * 这两部分总是只有一个有值 当单表查询时支持分表，所以是PartitionResult 当多表关联时，目前不支持分表，所以是string
+	 */
+	private BindSql tableDefinition;
+
 	// 绑定变量
 	private List<Variable> bind;
 	// 范围
@@ -111,11 +110,11 @@ public class QueryClauseImpl implements QueryClause {
 		this.wherePart = wherePart;
 	}
 
-	public String getTableDefinition() {
+	public BindSql getTableDefinition() {
 		return tableDefinition;
 	}
 
-	public void setTableDefinition(String tableDefinition) {
+	public void setTableDefinition(BindSql tableDefinition) {
 		this.tableDefinition = tableDefinition;
 	}
 
@@ -127,7 +126,7 @@ public class QueryClauseImpl implements QueryClause {
 		return tables;
 	}
 
-	public void setTables(String baseTableName,PartitionResult[] tables) {
+	public void setTables(String baseTableName, PartitionResult[] tables) {
 		this.baseTableName = baseTableName;
 		this.tables = tables;
 	}
@@ -145,11 +144,11 @@ public class QueryClauseImpl implements QueryClause {
 	 * 
 	 * @return
 	 */
-	private String getSql(String tableDef, boolean delayProcessGroupClause) {
-		StringBuilder sb = new StringBuilder(200);
-		if(delayProcessGroupClause){
+	private BindSql getSql(BindSql tableDef, boolean delayProcessGroupClause) {
+		SqlBuilder sb = new SqlBuilder();
+		if (delayProcessGroupClause) {
 			selectPart.appendNoGroupFunc(sb);
-		}else{
+		} else {
 			selectPart.append(sb);
 		}
 		sb.append(" from ");
@@ -159,65 +158,64 @@ public class QueryClauseImpl implements QueryClause {
 			sb.append(wherePart);
 		}
 		if (!delayProcessGroupClause)
-			sb.append(grouphavingPart);
-		return sb.toString();
+			sb.append(grouphavingPart.toString());
+		sb.addAllBind(this.bind);
+		return sb.build();
 	}
 
 	public BindSql getSql(PartitionResult site) {
+		// 是多表查询,无须支持分库分表
 		if (tableDefinition != null) {
-			return withPage(getSql(tableDefinition, false).concat(orderbyPart.getSql()), false).setBind(bind);
+			BindSql sql = getSql(tableDefinition, false).concat(orderbyPart.getSql());
+			return withPage(sql, false);
 		}
+		// 异常情况容错
 		if (site == null) {
 			if (tables.length == 0) {
 				throw new IllegalArgumentException("The partition result does not return any result!");
 			}
 			site = this.tables[0];
 		}
-		StringBuilder sb = new StringBuilder(200);
-		List<Variable> bind = this.bind;
+
+		// 拼装多表引发的中间部分
+		SqlBuilder sb = new SqlBuilder();
 		boolean moreTable = site.tableSize() > 1;
 		for (int i = 0; i < site.tableSize(); i++) {
-			if (i > 0) {
+			if (i > 0) {// 第二张表开始就要用unionAll来组织了
 				sb.append("\n union all \n");
 			}
 			String tableName = site.getTablesEscaped(profile).get(i);
-			sb.append(getSql(tableName.concat(" t"), moreTable  && grouphavingPart.isNotEmpty()));// 为多表、并且有groupby时需要特殊处理.grouphavingPart.isNotEmpty()不能省略。
-			//如果省略掉，则多表union时造成所有内部表的字段均未使用别名。此时外部又没有套一层将列转为别名，最终效果是别名无效。
-
+			// 为多表、并且有groupby时需要特殊处理.grouphavingPart.isNotEmpty()不能省略。
+			// 如果省略掉，则多表union时造成所有内部表的字段均未使用别名。此时外部又没有套一层将列转为别名，最终效果是别名无效。
+			BindSql select=getSql(new BindSql(tableName.concat(" t"),null), moreTable && grouphavingPart.isNotEmpty());
+			sb.append(select);
 		}
 
 		// 不带group by、having、order by从句的情况下，无需再union一层，
 		// 否则，对查询列指定别名时会产生异常。
 		if (moreTable && (grouphavingPart.isNotEmpty() || orderbyPart.isNotEmpty())) {
-			StringBuilder sb2 = new StringBuilder();
+			SqlBuilder sb2 = new SqlBuilder();
 			selectPart.append(sb2);
-
-			sb2.append(" from (").append(sb).append(") t");
+			sb2.append(" from (").append(sb.build()).append( ") t");
 			sb2.append(ORMConfig.getInstance().wrap);
 			sb2.append(grouphavingPart.getSql(false));
 			sb = sb2;
 		}
-
-		if (moreTable) {
-			// 当复杂情况下，绑定变量也要翻倍
-			bind = SqlAnalyzer.repeat(this.bind,  site.tableSize());
-		}
-
 		sb.append(orderbyPart.getSql());
-		return withPage(sb.toString(), moreTable).setBind(bind);
+		return withPage(sb.build(), moreTable).setBind(bind);
 	}
 
-	private BindSql withPage(String sql, boolean union) {
+	private BindSql withPage(BindSql sql, boolean union) {
 		if (pageRange != null) {
-			if(isMultiDatabase()){
-				if(grouphavingPart==null || !grouphavingPart.isNotEmpty()){
-					return profile.getLimitHandler().toPageSQL(sql, new int[]{0,pageRange.getEndAsInt()}, union);
+			if (isMultiDatabase()) {
+				if (grouphavingPart == null || !grouphavingPart.isNotEmpty()) {
+					return profile.getLimitHandler().toPageSQL(sql, new int[] { 0, pageRange.getEndAsInt() }, union);
 				}
-			}else{
+			} else {
 				return profile.getLimitHandler().toPageSQL(sql, pageRange.toArray(), union);
 			}
 		}
-		return new BindSql(sql);
+		return sql;
 	}
 
 	private CacheKey cacheKey;
@@ -226,14 +224,14 @@ public class QueryClauseImpl implements QueryClause {
 	public CacheKey getCacheKey() {
 		if (cacheKey != null)
 			return cacheKey;
-		try{
-			if(baseTableName == null) {
-				this.cacheKey=new SqlCacheKey(new KeyDimension(tableDefinition,wherePart, orderbyPart.getSql(),profile), CacheImpl.toParamList(this.bind));
-			}else {
-				this.cacheKey=new SqlCacheKey(KeyDimension.forSingleTable(baseTableName,wherePart, orderbyPart.getSql(),profile), CacheImpl.toParamList(this.bind));
+		try {
+			if (baseTableName == null) {
+				this.cacheKey = new SqlCacheKey(new KeyDimension(tableDefinition.getSql(), wherePart, orderbyPart.getSql(), profile), CacheImpl.toParamList(this.bind));
+			} else {
+				this.cacheKey = new SqlCacheKey(KeyDimension.forSingleTable(baseTableName, wherePart, orderbyPart.getSql(), profile), CacheImpl.toParamList(this.bind));
 			}
 			return cacheKey;
-		}catch(RuntimeException e){
+		} catch (RuntimeException e) {
 			return null;
 		}
 	}

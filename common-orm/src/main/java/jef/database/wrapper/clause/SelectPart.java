@@ -42,7 +42,7 @@ public class SelectPart {
 		return entries;
 	}
 
-	public void appendNoGroupFunc(StringBuilder sb) {
+	public void appendNoGroupFunc(SqlBuilder sb) {
 		sb.append("select ");
 		if (distinct)
 			sb.append("distinct ");
@@ -83,7 +83,7 @@ public class SelectPart {
 	 * 
 	 * @param sb
 	 */
-	public void append(StringBuilder sb) {
+	public void append(SqlBuilder sb) {
 		sb.append("select ");
 		if (distinct)
 			sb.append("distinct ");
@@ -97,7 +97,7 @@ public class SelectPart {
 			sb.append(entry.getKey());
 			if (entry.getValue() != null) { // value 是别名
 				// PostgreSQL中，当name作为列别名需要加AS，否则会报错
-				sb.append(" AS ").append(entry.getValue());
+				sb.append(" AS ",entry.getValue());
 			}
 			i++;
 		}

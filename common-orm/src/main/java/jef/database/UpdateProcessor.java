@@ -10,7 +10,6 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import jef.common.Entry;
-import jef.common.PairSO;
 import jef.common.log.LogUtil;
 import jef.database.Session.UpdateContext;
 import jef.database.dialect.ColumnType;
@@ -35,7 +34,6 @@ import jef.database.wrapper.executor.DbTask;
 import jef.database.wrapper.variable.BindVariableContext;
 import jef.database.wrapper.variable.ConstantVariable;
 import jef.database.wrapper.variable.UpdateVairable;
-import jef.database.wrapper.variable.Variable;
 import jef.tools.Assert;
 import jef.tools.StringUtils;
 import jef.tools.reflect.BeanWrapper;
@@ -296,11 +294,8 @@ public abstract class UpdateProcessor {
 					JpqlExpression je = (JpqlExpression) value;
 					if (!je.isBind())
 						je.setBind(obj.getQuery());
-					PairSO<List<Variable>> entry =je.toSqlAndBindAttribs2(new SqlContext(null, obj.getQuery()), profile);
-					result.addEntry(columnName, entry.first);
-					for(Variable binder: entry.second){
-						result.addField(binder);
-					}
+					result.prepare(columnName);
+					je.toSqlAndBindAttribs2(result,new SqlContext(null, obj.getQuery()), profile);
 				} else if (value instanceof jef.database.Field) {// FBI
 																	// Field不可能在此
 					String setColumn = meta.getColumnName((Field) value, profile, true);

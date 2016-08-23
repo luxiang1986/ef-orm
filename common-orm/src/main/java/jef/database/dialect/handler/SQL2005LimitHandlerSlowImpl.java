@@ -28,9 +28,9 @@ public class SQL2005LimitHandlerSlowImpl extends SQL2000LimitHandlerSlowImpl {
 		defaultOrder.setOrderByElements(Arrays.asList(oe));
 	}
 	
-	protected BindSql processToPageSQL(String sql, int[] offsetLimit) {
+	protected BindSql processToPageSQL(BindSql sql, int[] offsetLimit) {
 		try {
-			Select select = DbUtils.parseNativeSelect(sql);
+			Select select = DbUtils.parseNativeSelect(sql.getSql());
 			if(select.getSelectBody() instanceof PlainSelect){
 				return toPage(offsetLimit,(PlainSelect)select.getSelectBody(),sql);
 			}else{
@@ -41,7 +41,7 @@ public class SQL2005LimitHandlerSlowImpl extends SQL2000LimitHandlerSlowImpl {
 		}
 	}
 
-	private BindSql toPage(int[] offsetLimit, Union union, String raw) {
+	private BindSql toPage(int[] offsetLimit, Union union, BindSql raw) {
 		OrderBy order = union.getOrderBy();
 		if (order == null) {
 			order = union.getLastPlainSelect().getOrderBy();
@@ -62,10 +62,10 @@ public class SQL2005LimitHandlerSlowImpl extends SQL2000LimitHandlerSlowImpl {
 		union.appendTo(sb);
 		sb.append(") _tmp1) _tmp2 where __rn between ");
 		sb.append(offsetLimit[0] + 1).append(" and ").append(offsetLimit[0] + offsetLimit[1]);
-		return new BindSql(sb.toString());
+		return raw.setSql(sb.toString());
 	}
 
-	private BindSql toPage(int[] offsetLimit, PlainSelect selectBody, String raw) {
+	private BindSql toPage(int[] offsetLimit, PlainSelect selectBody, BindSql raw) {
 		OrderBy order = selectBody.getOrderBy();
 		if (order == null) {
 			order = defaultOrder;
@@ -81,6 +81,6 @@ public class SQL2005LimitHandlerSlowImpl extends SQL2000LimitHandlerSlowImpl {
 		selectBody.appendTo(sb);
 		sb.append(") _tmp1 where __rn between ");
 		sb.append(offsetLimit[0] + 1).append(" and ").append(offsetLimit[0] + offsetLimit[1]);
-		return new BindSql(sb.toString());
+		return raw.setSql(sb.toString());
 	}
 }

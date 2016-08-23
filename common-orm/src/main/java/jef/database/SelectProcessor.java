@@ -25,6 +25,7 @@ import jef.database.query.Query;
 import jef.database.query.SelectsImpl;
 import jef.database.query.SingleColumnSelect;
 import jef.database.query.SqlContext;
+import jef.database.query.condition.CondParams;
 import jef.database.routing.PartitionResult;
 import jef.database.support.MultipleDatabaseOperateException;
 import jef.database.support.SqlLog;
@@ -34,6 +35,7 @@ import jef.database.wrapper.clause.GroupClause;
 import jef.database.wrapper.clause.OrderClause;
 import jef.database.wrapper.clause.QueryClause;
 import jef.database.wrapper.clause.SelectPart;
+import jef.database.wrapper.clause.SqlBuilder;
 import jef.database.wrapper.executor.DbTask;
 import jef.database.wrapper.variable.BindVariableContext;
 import jef.http.client.support.CommentEntry;
@@ -149,8 +151,9 @@ public abstract class SelectProcessor {
 
 				PartitionResult[] sites = DbUtils.toTableNames(query.getInstance(), myTableName, query, db.getPartitionSupport());
 				DatabaseDialect profile = getProfile(sites);
+				CondParams params=new CondParams(parent, profile, false);
 				SqlContext context = query.prepare();
-				GroupClause groupClause = toGroupAndHavingClause(query, context, profile);
+				GroupClause groupClause = toGroupAndHavingClause(query, context, params);
 				if (sites.length > 1) {// 多数据库下还要Distinct，没办法了
 					if (context.isDistinct()) {
 						throw new MultipleDatabaseOperateException("Not Supported, Count with 'distinct'");
@@ -159,7 +162,7 @@ public abstract class SelectProcessor {
 					}
 				}
 
-				BindSql result = parent.toWhereClause(query, context, null, profile,false);
+				BindSql result = parent.toWhereClause(query, context, null, profile, false);
 				if (context.isDistinct()) {
 					String countStr = toSelectCountSql(context.getSelectsImpl(), context, groupClause.isNotEmpty());
 					for (PartitionResult site : sites) {
@@ -181,18 +184,20 @@ public abstract class SelectProcessor {
 				Join join = (Join) obj;
 				SqlContext context = join.prepare();
 				DatabaseDialect profile = getProfile();
-				GroupClause groupClause = toGroupAndHavingClause(join, context, profile);
+				CondParams params=new CondParams(parent, profile, false);
+				GroupClause groupClause = toGroupAndHavingClause(join, context, params);
 
 				CountClause cq = new CountClause();
-				String countStr;
+				SqlBuilder countStr=new SqlBuilder();
 				if (context.isDistinct()) {
-					countStr = toSelectCountSql(context.getSelectsImpl(), context, groupClause.isNotEmpty());
+					countStr.append(toSelectCountSql(context.getSelectsImpl(), context, groupClause.isNotEmpty()));
 				} else {
-					countStr = "select count(*) from ";
+					countStr.append("select count(*) from ");
 				}
-				BindSql result = parent.toWhereClause(join, context, null, profile, false);
-				result.setSql(countStr + join.toTableDefinitionSql(parent, context, profile,false) + result.getSql() + groupClause);
-				cq.addSql(null, result);
+				join.toTableDefinitionSql(countStr, context, params);
+				parent.toWhereClause(countStr,join, context, null, params);
+				countStr.append(groupClause.toString());
+				cq.addSql(null, countStr.build());
 				return cq;
 			} else if (obj instanceof ComplexQuery) {
 				ComplexQuery cq = (ComplexQuery) obj;
@@ -279,7 +284,7 @@ public abstract class SelectProcessor {
 	}
 
 	// 转为group + having语句
-	public static GroupClause toGroupAndHavingClause(JoinElement q, SqlContext context, DatabaseDialect profile) {
+	public static GroupClause toGroupAndHavingClause(JoinElement q, SqlContext context, CondParams params) {
 		GroupClause result = new GroupClause();
 		for (ISelectItemProvider table : context.getReference()) {
 			if (table.getReferenceCol() == null)
@@ -288,12 +293,12 @@ public abstract class SelectProcessor {
 				if (field instanceof SingleColumnSelect) {
 					SingleColumnSelect column = (SingleColumnSelect) field;
 					if ((column.getProjection() & ISelectProvider.PROJECTION_GROUP) > 0) {
-						result.addGroup(column.getSelectItem(profile, table.getSchema(), context));
+						result.addGroup(column.getSelectItem(params.getDialect(), table.getSchema(), context));
 					}
 					if ((column.getProjection() & ISelectProvider.PROJECTION_HAVING) > 0) {
-						result.addHaving(column.toHavingClause(profile, table.getSchema(), context));
+						result.addHaving(column.toHavingClause(table.getSchema(), context, params));
 					} else if ((column.getProjection() & ISelectProvider.PROJECTION_HAVING_NOT_SELECT) > 0) {
-						result.addHaving(column.toHavingClause(profile, table.getSchema(), context));
+						result.addHaving(column.toHavingClause(table.getSchema(), context, params));
 					}
 				}
 			}

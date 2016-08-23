@@ -20,7 +20,6 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-import jef.common.log.LogUtil;
 import jef.database.dialect.DatabaseDialect;
 import jef.database.dialect.type.ColumnMapping;
 import jef.database.dialect.type.ColumnMappings;
@@ -31,9 +30,12 @@ import jef.database.meta.ITableMetadata;
 import jef.database.meta.TupleField;
 import jef.database.query.JpqlExpression;
 import jef.database.query.LazyQueryBindField;
+import jef.database.query.Query;
 import jef.database.query.RefField;
 import jef.database.query.SqlContext;
 import jef.database.query.SqlExpression;
+import jef.database.query.condition.CondParams;
+import jef.database.query.condition.ConditionUtils;
 import jef.database.wrapper.clause.SqlBuilder;
 import jef.database.wrapper.variable.ConstantVariable;
 import jef.database.wrapper.variable.QueryLookupVariable;
@@ -119,7 +121,8 @@ public class Condition implements Serializable {
 	 * 匹配字符串任意位置</li> <li>in in</li> <li>[] BETWEEN</li>
 	 */
 	public enum Operator {
-		EQUALS("="), GREAT(">"), LESS("<"), GREAT_EQUALS(">="), LESS_EQUALS("<="), MATCH_ANY("*=", " like "), MATCH_START("^=", " like "), MATCH_END("$=", " like "), IN("in", " in "), NOT_IN("not in"), NOT_EQUALS("!="), BETWEEN_L_L("[]"), IS_NULL("=NULL"), IS_NOT_NULL("!=NULL");
+		EQUALS("="), GREAT(">"), LESS("<"), GREAT_EQUALS(">="), LESS_EQUALS("<="), MATCH_ANY("*=", " like "), MATCH_START("^=", " like "), MATCH_END("$=", " like "), IN("in", " in "), NOT_IN("not in"), NOT_EQUALS("!="), BETWEEN_L_L("[]"), IS_NULL(" IS NULL"), IS_NOT_NULL(
+				" IS NOT NULL");
 
 		Operator(String key, String oper) {
 			this.key = key;
@@ -177,44 +180,54 @@ public class Condition implements Serializable {
 	}
 
 	// 产生非绑定变量下的where条件
-	public String toSqlClause(ITableMetadata meta, SqlContext context, SqlProcessor processor, IQueryableEntity instance, DatabaseDialect profile, boolean batch) {
-		if (field == null) {
-			throw new NullPointerException("Condition not complete!");
-		}
-		Field field = this.field;
+	public static void toSqlClause(Condition cond, SqlBuilder builder, SqlContext context, IQueryableEntity instance, CondParams param) {
+		Assert.notNull(cond.field);
+		Field field = cond.field;
 		// 特殊Field条件
 		if (field instanceof IConditionField) {
-			return ((IConditionField) field).toSql(meta, processor, context, instance, profile, batch);
+			((IConditionField) field).toPrepareSql(builder, context, instance, param);
+			return;
 		} else if (field instanceof RefField) {
 			RefField ref = (RefField) field;
-			ITableMetadata refMeta = ((RefField) field).getInstanceQuery(context).getMeta();
-			SqlContext refContext = context.getContextOf(ref.getInstanceQuery(context));
-			// 替换上下文，然后继续处理……
-			field = ref.getField();
-			meta = refMeta;
-			context = refContext;
-			instance = ref.getInstanceQuery(context).getInstance();
+			Query<?> binded = ref.getInstanceQuery(context);
+			toSql222(builder, cond, context.getContextOf(binded), binded.getInstance(), param);
+			return;
+		} else {
+			toSql222(builder, cond, context, instance, param);
+			return;
 		}
+	}
+
+	private static void toSql222(SqlBuilder builder, Condition cond, SqlContext context, IQueryableEntity instance, CondParams param) {
+		Field field = cond.field;
+		Operator operator = cond.operator;
+		Object value = cond.value;
+
 		// Like条件下
 		if (ArrayUtils.contains(Like.LIKE_OPERATORS, operator)) {
 			Like like = new Like(field, operator, value);
-			return like.toSql(meta, profile, context, instance);
+			like.toPrepareSql(builder, context, instance, param);
+			return;
 		}
-		String columnName;
+		// JpqlExpression
 		if (field instanceof JpqlExpression) {
-			columnName = ((JpqlExpression) field).toSqlAndBindAttribs(context, profile);
-		} else {
-			columnName = DbUtils.toColumnName(field, profile, context == null ? null : context.getCurrentAliasAndCheck(field));
+			((JpqlExpression) field).toSqlAndBindAttribs2(builder, context, param.getDialect());
+			return;
 		}
+		// ////////////////////////////////////////
+
+		String columnName = DbUtils.toColumnName(field, param.getDialect(), context == null ? null : context.getCurrentAliasAndCheck(field));
 		if (operator == null) {
-			return columnName;
+			builder.append(columnName);
+			return;
 		}
-		if (profile.has(Feature.EMPTY_CHAR_IS_NULL) && value instanceof CharSequence) {
+
+		// fix null conditions
+		if (param.getDialect().has(Feature.EMPTY_CHAR_IS_NULL) && value instanceof CharSequence) {
 			if (((CharSequence) value).length() == 0) {
 				value = null;
 			}
 		}
-		// 常规Field条件
 		if (ArrayUtils.notContains(NULL_ABLE_VALUE, operator) && value == null) {
 			if (operator == Operator.EQUALS) {
 				operator = Operator.IS_NULL;
@@ -225,34 +238,36 @@ public class Condition implements Serializable {
 			}
 		}
 
+		//
 		ColumnMapping type = null;
 		if (field instanceof Enum || field instanceof TupleField) {// 计算列的数据类型
+			ITableMetadata meta = context.getCurrent().getQuery().getMeta();
 			type = meta.getColumnDef(field);
 			if (type == null) {
-				throw new IllegalArgumentException("There is no proper field in " + meta.getThisType().getName() + " to populate a SQL condition expression:" + field.name());
+				throw new IllegalArgumentException("Field not found:" + meta.getThisType().getName() + " to populate a SQL condition expression:" + field.name());
 			}
 		}
-		return toSql(columnName, operator, value, profile, context, type);
+		toSql(builder, columnName, operator, value, context, type, param);
+
 	}
 
 	/*
 	 * 产生用于批处理的Update语句的Where字句中的sql语句，形如 xx=? 等等 xx is null预处理若干复杂的Field类型
 	 */
-	public void toPrepareSqlClause(SqlBuilder builder, ITableMetadata meta, SqlContext context, SqlProcessor processor, IQueryableEntity instance, DatabaseDialect profile, boolean batch) {
+	public void toPrepareSqlClause(SqlBuilder builder, SqlContext context, IQueryableEntity instance, CondParams params) {
+		Assert.notNull(context);
 		// 特殊Field条件
 		if (field instanceof IConditionField) {
-			((IConditionField) field).toPrepareSql(builder, meta, processor, context, instance, profile, batch);
+			((IConditionField) field).toPrepareSql(builder, context, instance, params);
 			return;
 		} else if (field instanceof LazyQueryBindField) {
 			LazyQueryBindField ref = (LazyQueryBindField) field;
-			ITableMetadata refMeta = ref.getInstanceQuery(context).getMeta();
-			SqlContext refContext = context.getContextOf(ref.getInstanceQuery(context));
-			if (ref instanceof RefField) {
-				toPrepareSqlClause(builder, refMeta, refContext, processor, ref.getInstanceQuery(context).getInstance(), ((RefField) ref).getField(), profile, batch);
-				return;
-			}
+			Query<?> q = ref.getInstanceQuery(context);
+			SqlContext refContext = context.getContextOf(q);
+			toPrepareSqlClause(builder, refContext, q.getInstance(), ((RefField) ref).getField(), params);
+		} else {
+			toPrepareSqlClause(builder, context, instance, field, params);
 		}
-		toPrepareSqlClause(builder, meta, context, processor, instance, field, profile, batch);
 	}
 
 	/**
@@ -260,27 +275,27 @@ public class Condition implements Serializable {
 	 * 
 	 * @return
 	 */
-	private void toPrepareSqlClause(SqlBuilder builder, ITableMetadata meta, SqlContext context, SqlProcessor processor, IQueryableEntity instance, Field rawField, DatabaseDialect profile, boolean batch) {
+	private void toPrepareSqlClause(SqlBuilder builder, SqlContext context, IQueryableEntity instance, Field rawField, CondParams params) {
 		// 当value为Field的时候……
 		if (value instanceof jef.database.Field && value.getClass().isEnum()) {// 当value为基本field时
 			value = new RefField((Field) value);
 		}
 		// 表达式对象无需绑定变量
 		if ((value instanceof Expression) || value instanceof RefField) {
-			builder.append(toSqlClause(meta, context, processor, instance, profile, batch));
+			toSqlClause(this, builder, context, instance, params);
 			return;
 		}
 		// Like条件下
 		if (ArrayUtils.contains(Like.LIKE_OPERATORS, operator)) {
 			Like like = new Like(rawField, operator, value);
-			like.toPrepareSql(builder, meta, profile, context, instance,batch);
+			like.toPrepareSql(builder, context, instance, params);
 			return;
 		}
 		// 其他简单条件情况下
 		if (operator == null || rawField == null) {
 			throw new NullPointerException("Condition not complete!");
 		}
-		if (profile.has(Feature.EMPTY_CHAR_IS_NULL) && value instanceof CharSequence) {
+		if (params.getDialect().has(Feature.EMPTY_CHAR_IS_NULL) && value instanceof CharSequence) {
 			if (((CharSequence) value).length() == 0) {
 				value = null;
 			}
@@ -295,38 +310,55 @@ public class Condition implements Serializable {
 				throw new IllegalArgumentException("The value of condition [" + field + " " + operator.getKey() + " (...)] must not be null!");
 			}
 		}
-		StringBuilder sb = new StringBuilder();
 
-		String columnName;
 		if (rawField instanceof JpqlExpression) {
-			columnName = ((JpqlExpression) rawField).toSqlAndBindAttribs(context, profile);
+			((JpqlExpression) rawField).toSqlAndBindAttribs2(builder, context, params.getDialect());
 		} else {
-			columnName = DbUtils.toColumnName(rawField, profile, context == null ? null : context.getCurrentAliasAndCheck(rawField));
+			ConditionUtils.parseField(builder, rawField, context, instance, params);
+			// DbUtils.toColumnName(rawField, profile, context == null ? null :
+			// context.getCurrentAliasAndCheck(rawField));
 		}
 
-		if (operator == Operator.IS_NULL) {
-			sb.append(columnName).append(" is null");
+		switch (operator) {
+		case IS_NOT_NULL:
+		case IS_NULL:
+			builder.append(operator.oper);
 			return;
-		} else if (operator == Operator.IS_NOT_NULL) {
-			sb.append(columnName).append(" is not null");
+		case BETWEEN_L_L:
+			parseBetweenIn(builder, BETWEEN_OPER, rawField, context, instance, params);
 			return;
+		case IN:
+			parseBetweenIn(builder, IN_OPER, rawField, context, instance, params);
+			return;
+		case NOT_IN:
+			parseBetweenIn(builder, NOT_IN_OPER, rawField, context, instance, params);
+			return;
+			// /////////////////
+		case LESS:
+		case LESS_EQUALS:
+		case EQUALS:
+		case NOT_EQUALS:
+		case GREAT:
+		case GREAT_EQUALS:
+			builder.append(operator.oper);
+			// TODO
+			// parseValue();
+			break;
+		// ////////////////
+		case MATCH_ANY:
+		case MATCH_END:
+		case MATCH_START:
+			// TODO, Move like logic here
+			throw new UnsupportedOperationException(operator.name());
+		default:
+			throw new UnsupportedOperationException(operator.name());
 		}
-		if (getInBetweenOper(operator) != null) {
-			processBetween(builder, columnName, rawField, profile, meta, context, processor, instance, batch);
-			return;
-		} else {
-			builder.append(columnName, operator.oper, "?");
-			if (batch) {
-				builder.addBind(new QueryLookupVariable(rawField, operator));
-			} else {
-				builder.addBind(new ConstantVariable(rawField.name() + operator, value));
-			}
-
-		}
+		ConditionUtils.parseValue(builder, rawField,operator,value, params);
 	}
 
-	private void processBetween(SqlBuilder builder, String columnName, Field rawField, DatabaseDialect profile, ITableMetadata meta, SqlContext context, SqlProcessor processor, IQueryableEntity instance, boolean batch) {
-		String[] spOpers = getInBetweenOper(operator);
+
+
+	private void parseBetweenIn(SqlBuilder builder, String[] spOpers, Field rawField, SqlContext context, IQueryableEntity instance, CondParams params) {
 		String oper = spOpers[0];
 		String div = spOpers[1];
 		String tailer = spOpers[2];
@@ -350,18 +382,17 @@ public class Condition implements Serializable {
 					builder.append("1=1");
 				}
 			} else {
-				builder.append(columnName, oper);
+				builder.append(oper);
 				int n = 0;
 				for (Iterator<Object> iter = CollectionUtils.iterator(value, Object.class); iter.hasNext();) {
 					Object o = iter.next();
 					if (n > 0)
 						builder.append(div);
 					if (o instanceof Field) {
-						Condition c = get((Field) o, null, null);
-						builder.append(c.toSqlClause(meta, context, processor, instance, profile, batch));
+						ConditionUtils.parseField(builder, (Field) o, context, instance, params);
 					} else {
 						builder.append("?");
-						if (batch) {
+						if (params.isBatch()) {
 							builder.addBind(new QueryLookupVariable(rawField, operator));
 						} else {
 							builder.addBind(new ConstantVariable(rawField.name() + operator, o));
@@ -392,42 +423,34 @@ public class Condition implements Serializable {
 		return null;
 	}
 
-	public static String toSql(String columnName, Operator operator, Object value, DatabaseDialect profile, SqlContext context, ColumnMapping type) {
+	public static void toSql(SqlBuilder sb, String columnName, Operator operator, Object value, SqlContext context, ColumnMapping type, CondParams params) {
 		if (value instanceof jef.database.Field && value.getClass().isEnum()) {// 基本field
 			value = new RefField((Field) value);
 		}
 		// 生成条件SQL
 		String[] spOpers;
-		StringBuilder sb = new StringBuilder();
 		if (operator == Operator.IS_NULL) {
-			sb.append(columnName).append(" is null");
+			sb.append(columnName, " IS NULL");
 		} else if (value == Operator.IS_NOT_NULL) {
-			sb.append(columnName).append(" is not null");
+			sb.append(columnName, " IS NOT NULL");
 		} else if (value instanceof RefField) {
 			RefField rf = (RefField) value;
-			String alias = context == null ? "" : context.getAliasOf(rf.getInstanceQuery(context));
-			if (alias != null) {
-				sb.append(columnName).append(operator.oper).append(alias);
-				if (alias.length() > 0)
-					sb.append('.');
-				sb.append(DbUtils.toColumnName(rf.getFieldDef(), profile, null));
-			} else {
-				LogUtil.show("Not found Table Alias for ref-field:" + rf.toString());
-				sb.append(columnName).append(operator.oper).append(DbUtils.toColumnName(rf.getFieldDef(), profile, null));
-			}
+			String alias = context == null ? null : context.getAliasOf(rf.getInstanceQuery(context));
+			sb.append(columnName, operator.oper, DbUtils.toColumnName(rf.getFieldDef(), params.getDialect(), alias));
 		} else if ((spOpers = getInBetweenOper(operator)) != null) {
 			String oper = spOpers[0];
 			String div = spOpers[1];
 			String tailer = spOpers[2];
 			if (value instanceof CharSequence) {
-				sb.append(columnName).append(oper).append('\'').append(value.toString()).append('\'').append(tailer);
+				sb.append(columnName, oper, "?", tailer);
+				// (value.toString()).append('\'').append(tailer);
 			} else {
 				List<String> sqlValues = new ArrayList<String>();
 				Iterator<Object> iter = CollectionUtils.iterator(value, Object.class);
 				Assert.notNull(iter, "Error param, the value of in operator must be a array or string :" + value.getClass().getName());
 				for (; iter.hasNext();) {
 					Object v = iter.next();
-					sqlValues.add(type.getSqlStr(v, profile));
+					sqlValues.add(type.getSqlStr(v, params.getDialect()));
 				}
 				if (operator == Operator.BETWEEN_L_L && sqlValues.size() != 2) {// 无效的BETWEEN操作
 					throw new RuntimeException("The between operator must have 2 params");
@@ -435,18 +458,18 @@ public class Condition implements Serializable {
 				if (sqlValues.size() == 0) {// 无效果的in操作
 					sb.append("1=2");
 				} else {
-					sb.append(columnName).append(oper).append(StringUtils.join(sqlValues, div)).append(tailer);
+					sb.append(columnName, oper, StringUtils.join(sqlValues, div), tailer);
 				}
 			}
 		} else if (value instanceof SqlExpression) {
-			sb.append(columnName).append(operator.oper).append(((SqlExpression) value).getText());
+			sb.append(columnName, operator.oper, ((SqlExpression) value).getText());
 		} else if (value instanceof JpqlExpression) {
 			JpqlExpression jpql = (JpqlExpression) value;
-			sb.append(columnName).append(operator.oper).append(jpql.toSqlAndBindAttribs(context, profile));
+			sb.append(columnName, operator.oper, jpql.toSqlAndBindAttribs(context, params.getDialect()));
 		} else {
-			sb.append(columnName).append(operator.oper).append(type == null ? ColumnMappings.getSqlStr(value, profile) : type.getSqlStr(value, profile));
+			DatabaseDialect profile = params.getDialect();
+			sb.append(columnName, operator.oper, type == null ? ColumnMappings.getSqlStr(value, profile) : type.getSqlStr(value, profile));
 		}
-		return sb.toString();
 	}
 
 	public String toString() {

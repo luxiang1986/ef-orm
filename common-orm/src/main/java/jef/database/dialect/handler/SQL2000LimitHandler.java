@@ -28,18 +28,20 @@ import com.alibaba.druid.sql.dialect.sqlserver.visitor.SQLServerOutputVisitor;
 import com.alibaba.druid.sql.parser.ParserException;
 
 public class SQL2000LimitHandler implements LimitHandler {
-	public BindSql toPageSQL(String sql, int[] offsetLimit) {
+	public BindSql toPageSQL(BindSql bind, int[] offsetLimit) {
 		int offset = offsetLimit[0];
 		if (offset == 0) {// 没有offset可以简化处理
+			String sql=bind.getSql();
 			int indexDistinct = StringUtils.indexOfIgnoreCase(sql, "select distinct");
 			int index = StringUtils.indexOfIgnoreCase(sql, "select");
-			return new BindSql(new StringBuilder(sql.length() + 8).append(sql).insert(index + (indexDistinct == index ? 15 : 6), " top " + offsetLimit[1]).toString());
+			sql=new StringBuilder(sql.length() + 8).append(sql).insert(index + (indexDistinct == index ? 15 : 6), " top " + offsetLimit[1]).toString();
+			return new BindSql(sql,bind.getBind());
 		}
-		return processToPageSQL(sql, offsetLimit);
+		return processToPageSQL(bind, offsetLimit);
 	}
 
-	private BindSql processToPageSQL(String sql, int[] offsetLimit) {
-		SQLServerSelectParser parser = new SQLServerSelectParser(sql);
+	private BindSql processToPageSQL(BindSql sql, int[] offsetLimit) {
+		SQLServerSelectParser parser = new SQLServerSelectParser(sql.getSql());
 		try{
 			SQLSelect select = parser.select();
 			if(select.getQuery() instanceof SQLUnionQuery){
@@ -48,12 +50,12 @@ public class SQL2000LimitHandler implements LimitHandler {
 				return toPage(offsetLimit,(SQLServerSelectQueryBlock)select.getQuery(),select ,sql);
 			}
 		}catch(ParserException ex){
-			LogUtil.error(sql, ex);
+			LogUtil.error(sql.getSql(), ex);
 			throw ex;
 		}
 	}
 	
-	protected BindSql toPage(int[] offsetLimit, SQLServerSelectQueryBlock selectBody, SQLSelect select, String raw) {
+	protected BindSql toPage(int[] offsetLimit, SQLServerSelectQueryBlock selectBody, SQLSelect select, BindSql raw) {
 		SQLOrderBy order = select.getOrderBy();
 		if (order == null) {
 			throw new UnsupportedOperationException("Select must have order to page");
@@ -69,12 +71,12 @@ public class SQL2000LimitHandler implements LimitHandler {
 		//sb.append(") __ef_t");
 		
 		//appendOrderReverse(order,visitor, "__ef_t", selectBody.getSelectList());
-		return new BindSql(sb.toString()).setReverseResult(new ResultSetLaterProcess(offsetLimit[0]));
+		return new BindSql(sb.toString(),raw.getBind()).setReverseResult(new ResultSetLaterProcess(offsetLimit[0]));
 	}
 
 	
 
-	protected BindSql toPage(int[] offsetLimit, SQLUnionQuery union,SQLSelect select, String raw) {
+	protected BindSql toPage(int[] offsetLimit, SQLUnionQuery union,SQLSelect select, BindSql raw) {
 		SQLOrderBy order=removeOrder(union);
 		if(order==null){
 			throw new UnsupportedOperationException("Select must have order to page");
@@ -93,9 +95,17 @@ public class SQL2000LimitHandler implements LimitHandler {
 		order.accept(visitor);
 //		sb.append(") __ef_tmp2\n");
 //		appendOrderReverse(order,visitor,"__ef_tmp2",null);
-		return new BindSql(sb.toString()).setReverseResult(new ResultSetLaterProcess(offsetLimit[0]));
+		return new BindSql(sb.toString(), raw.getBind()).setReverseResult(new ResultSetLaterProcess(offsetLimit[0]));
 	}
 
+	/**
+	 * 早期版本SQLServer使用倒序Order By进行分页，自动处理难度较大，目前暂不支持改写SQL
+	 * @param order
+	 * @param visitor
+	 * @param tmpTableAlias
+	 * @param items
+	 */
+	@SuppressWarnings({"unused"})
 	private void appendOrderReverse(SQLOrderBy order, SQLServerOutputVisitor visitor,String tmpTableAlias,List<SQLSelectItem> items) {
 		StringBuilder sb=(StringBuilder)visitor.getAppender();
 		sb.append( " ORDER BY ");
@@ -171,7 +181,7 @@ public class SQL2000LimitHandler implements LimitHandler {
 
 
 	@Override
-	public BindSql toPageSQL(String sql, int[] offsetLimit, boolean isUnion) {
+	public BindSql toPageSQL(BindSql sql, int[] offsetLimit, boolean isUnion) {
 		return toPageSQL(sql, offsetLimit);
 	}
 

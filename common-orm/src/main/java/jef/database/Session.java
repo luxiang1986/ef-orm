@@ -69,6 +69,7 @@ import jef.database.query.Selects;
 import jef.database.query.SqlContext;
 import jef.database.query.SqlExpression;
 import jef.database.query.TypedQuery;
+import jef.database.query.condition.CondParams;
 import jef.database.routing.PartitionResult;
 import jef.database.support.DbOperatorListener;
 import jef.database.support.MultipleDatabaseOperateException;
@@ -3010,14 +3011,14 @@ public abstract class Session {
 			return versionColumn != null && isPkQuery != null && isPkQuery.booleanValue();
 		}
 
-		public void appendVersionCondition(SqlBuilder builder, SqlContext context, SqlProcessor processor, IQueryableEntity instance, DatabaseDialect profile, boolean batch) {
+		public void appendVersionCondition(SqlBuilder builder, SqlContext context, IQueryableEntity instance, CondParams params) {
 			Object value = versionColumn.getFieldAccessor().get(instance);
 			if (value != null) {
 				Condition cond = QB.eq(versionColumn.field(), value);
 				builder.startSection(" and ");
 				//FIXME 此处有误,在BatchUpdate中，应当是产生一个始终从对象取值的Variable，而不是生成一个常量条件。
 				//由Condition转换而成的SQL绑定语句中，都是常量这是不对的。
-				cond.toPrepareSqlClause(builder,versionColumn.getMeta(), context, processor, instance, profile ,batch);
+				cond.toPrepareSqlClause(builder, context, instance, params);
 				builder.endSection();
 			}
 		}
